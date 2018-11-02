@@ -1,0 +1,147 @@
+---
+title: "Elon’s Exploratory Data Analysis"
+author: "Rebecca Hadi"
+date: "10/20/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE, warning = FALSE, include = FALSE}
+#load packages 
+library(tidyverse) #tidyverse 
+library(magrittr)
+library(ggthemes)
+library(lubridate)
+library(kableExtra)
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# set wd & load data 
+setwd("~/Documents/personal-projects/baby-analysis")
+elon <- read.csv("export_data (20).csv")
+```
+
+## Background 
+
+When Elon was born, the hospital had us track the frequency of his feeds and diapers. Naturally this is an overwhelming task, especially when still in the hospital recovering, but fortunately for us, there is an app for that. After a quick search at the app store, we found Glow Baby and began using it track all things Elon.  
+```{r, fig.align = "center", out.width = "300px", fig.cap = "Call me Bayes, because my bias tells me Elon is the cutest.", echo = FALSE, out.extra='angle=270'}
+knitr::include_graphics("/Users/bt0x/Desktop/IMG_4263.jpg")
+```
+
+Some background: Breastfeeding is HARD. It just didn't work for myself or Elon. Strangely enough I felt tremendous guilt about deciding to stop breastfeeding, which was mitigated to some extent by my decision to pump breast milk exclusively to feed to Elon.  This ended up working better for our family, but in the end wasn't sustainable and Elon became an exclusively formula fed baby after that. Spoiler alert: he's fine.  Kudos to you if you breastfeed; kudos to you if you don't; and kudos to you if you decide kids aren't your thing. We all are just trying to make sense of our own existence. Enough with the existentialism - on to the analysis! 
+
+The app natively allows you to export the last 7 days of data. This wasn't very helpful as I didn't conduct this analysis until October 2018, and stopped using the app once I stopped pumping and once we could convince ourselves Elon was thriving. So, much longer than 7 days had passed.   
+
+Initially I thought it would be fun to try to access their API to get my data. After reaching out to customer service inquiring about an API, they sent me csv files with the data I needed.  Less fun than exploring pulling data via an API, but I'll take what I can get!  
+
+With any real world data source, it doesn't always turn out the way you expect. I was hoping to get data back on the volume of milk pumped, but upon inspection of the data set, the pumping data was a record for each session with a time stamp so I'm limited in the features I can explore. 
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE, include = FALSE}
+# First, some data cleanup & prep 
+# Add field to replace blank values as pumping (inferred based on data set)
+elon$feed_type_pump <- ifelse(elon$feed_type == '','Pumping',as.character(elon$feed_type))
+
+# Get date from start time label (timestamp)
+elon$date <- as.Date(elon$start_time_label)
+
+# Get hour from start time label (timestamp)
+elon$start_hour <- hour(elon$start_time_label)
+
+# subset of data that is pumping only 
+elon_pumping <-  elon %>% filter(feed_type_pump == 'Pumping')
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+head(elon) %>%
+  kable() %>%
+  kable_styling()
+
+```
+This is what the data set I'm working with looks like. I added a few features based on the time stamp. 
+
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# what are the min and max dates that i pumped? 
+min.pump.dt <- min(elon_pumping$date)
+max.pump.dt <- max(elon_pumping$date)
+pump.range <- as.double(difftime(max.pump.dt ,min.pump.dt , units = c("days")))
+
+# How many distinct pumping sessions did i have? 
+pump.count <- nrow(elon_pumping) # one row per session 
+
+# How many times did i pump on average? 
+avg.pump.per.day <- nrow(elon_pumping) / pump.range
+
+```
+
+Some summary stats: 
+
+* I exclusively pumped breast milk from `r min.pump.dt` to `r max.pump.dt`, which was a span of `r pump.range` days 
+* In total, I pumped a total of `r pump.count` sessions. 
+* On average, I pumped `r round(avg.pump.per.day,0)` per day. 
+
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE, include = FALSE}
+
+# Pumping Over Time  
+pump.over.time.plot <- ggplot(data = elon_pumping, aes(x = date, group = feed_type_pump, fill = feed_type_pump)) + 
+     geom_line(stat = "count") + 
+     theme_classic() + 
+     ggtitle("Times Pumped By Date") 
+
+
+#How many times total did I pump vs. Other Feed Types 
+feed.type.plot <- ggplot(data = elon, aes(x = feed_type_pump, group = feed_type_pump, fill = feed_type_pump)) + 
+     geom_bar(stat = "count") + 
+      theme_classic() + 
+      ggtitle("Feed Type Counts") + 
+    scale_fill_manual(name= "Feed Type", values = c("#A9A9A9", "#33F6FF","#3933FF","#64FF33")) 
+
+
+#What hour of the day did I pump the most? 
+time.of.day.plot <- ggplot(data = elon_pumping, aes(x = start_hour, group = feed_type_pump, fill = feed_type_pump)) + 
+     geom_bar(stat = "count") + 
+      theme_classic() + 
+      ggtitle("Times Pumped Over 24 Hour Period") + 
+      scale_fill_manual(name= "Feed Type",values=c("#A9A9A9"))  + 
+   #   geom_vline(xintercept=mode(elon$start_hour)) 
+      coord_flip()
+```
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# show plot for rmd 
+pump.over.time.plot
+```
+
+This graph makes it very clear when I stopped pumping, as you can see the steep decline in the number of sessions as I was weaning. 
+
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# show plot for rmd 
+feed.type.plot
+```
+
+As you can see, Elon had more bottles of breast milk than times I pumped (and significantly more than any time breastfeeding).  This is because of (1) a pumping session produces more milk than Elon has in one sitting and (2) I didn't start tracking pumping until roughly 1 week after the decision to pump exclusively. 
+
+```{r, message = FALSE, warning = FALSE, echo = FALSE}
+# show plot for rmd 
+time.of.day.plot
+```
+
+This plot shows frequency by time of day. Given that I was pumping ~8x per day for the majority of my pumping experience, that equates to roughly once every three hours. Talk about no sleep. Especially once Elon started to sleep in longer stretches but I would still need to wake up to pump. That didn't last long. 
+
+The most common hours that I pumped were (after adjusting for 24 hour hour format):
+
+* 0 (midnight): 10+ sessions 
+* 4am: 10+ sessions 
+* 10am: 10+ sessions 
+* 3pm: 10+ sessions 
+
+
+There is more variability in the times I would pump later in the evening. In the morning I was able to follow a more consistent schedule. 
+
+
+That's all for now. Thanks for reading! 
